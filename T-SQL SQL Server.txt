@@ -1,0 +1,100 @@
+
+--High value-customers. Customers who have made atleast one order with a total value greater than or equal to $10000 in the year 2016.
+SELECT Customers.CustomerID, CompanyName, Orders.OrderID, SUM(OrderDetails.Quantity*OrderDetails.UnitPrice) as TotalAmount
+From Customers Join Orders on Customers.CustomerID= Orders.CustomerID  
+Join OrderDetails on OrderDetails.OrderID = Orders.OrderID
+Where YEAR(OrderDate) = 2016
+Group BY Customers.CustomerID, CompanyName, Orders.OrderID 
+Having SUM(OrderDetails.Quantity*OrderDetails.UnitPrice) >= 10000
+Order BY TotalAmount DESC
+
+--High value-customers total orders. Customers who have orders totaling $15000 or more in the year 2016.
+SELECT Customers.CustomerID, CompanyName,  SUM(OrderDetails.Quantity*OrderDetails.UnitPrice) as TotalAmount
+From Customers Join Orders on Customers.CustomerID= Orders.CustomerID  
+Join OrderDetails on OrderDetails.OrderID = Orders.OrderID
+Where YEAR(OrderDate) = 2016
+Group BY Customers.CustomerID, CompanyName
+Having SUM(OrderDetails.Quantity*OrderDetails.UnitPrice) >= 15000
+Order BY TotalAmount DESC
+
+--High value-customers with discount.
+SELECT Customers.CustomerID, CompanyName,  SUM(OrderDetails.Quantity*OrderDetails.UnitPrice) as TotalAmountWithoutDiscount, 
+SUM((OrderDetails.Quantity*OrderDetails.UnitPrice)*(1-OrderDetails.Discount)) as TotalAmountWithDiscount
+From Customers Join Orders on Customers.CustomerID= Orders.CustomerID  
+Join OrderDetails on OrderDetails.OrderID = Orders.OrderID
+Where YEAR(OrderDate) = 2016
+Group BY Customers.CustomerID, CompanyName
+Having SUM(OrderDetails.Quantity*OrderDetails.UnitPrice) >= 15000
+Order BY TotalAmountWithDiscount DESC
+
+--Month end orders. Fetching last day of the month using EOMONTH()
+SELECT Employees.EmployeeID, OrderID, OrderDate
+From Orders Join Employees on Orders.EmployeeID = Employees.EmployeeID
+Where OrderDate = EOMONTH(OrderDate)
+Order BY EmployeeID, OrderID
+
+--Top Orders with ties.
+Select Top 10 with ties OrderID , Count(OrderID) as TotalOrderID From OrderDetails
+Group BY OrderID
+Order BY TotalOrderID DESC
+
+--Duplicate Orders with CTE
+With PotentialDuplicates as (SELECT OrderID from Orderdetails 
+where quantity >60
+Group By OrderID
+Having COUNT(*)>1
+)
+Select * from OrderDetails
+Where OrderID in (Select OrderID from PotentialDuplicates)
+Order by
+OrderID, ProductID
+
+--Late Orders vs Total Orders Percentage. Note: Handeling NULL values, converting integer to decimal and formatting values to percentage. 
+With LateOrders as
+(SELECT EmployeeID, Count(OrderID) as OrdersTotal from Orders
+Where RequiredDate<=ShippedDate
+Group BY EmployeeID)
+,AllOrders as 
+(Select EmployeeID, Count(OrderID) as OrdersTotal from Orders
+Group BY EmployeeID)
+Select Employees.EmployeeID, LastName, AllOrders.OrdersTotal as AllOrdersTotal, ISNULL(LateOrders.OrdersTotal,0) as LateOrdersTotal,
+PercentLateOrders = Format(Cast(ISNULL(LateOrders.OrdersTotal,0) as decimal)/AllOrders.OrdersTotal, 'P') From Employees
+Left Join LateOrders on LateOrders.EmployeeID = Employees.EmployeeID 
+Join AllOrders on AllOrders.EmployeeID = Employees.EmployeeID
+Order BY Employees.EmployeeID
+
+--Late Orders vs Total Orders Percentage. Converting integer to decimal.
+With LateOrders as
+(SELECT EmployeeID, Count(OrderID) as OrdersTotal from Orders
+Where RequiredDate<=ShippedDate
+Group BY EmployeeID)
+,AllOrders as 
+(Select EmployeeID, Count(OrderID) as OrdersTotal from Orders
+Group BY EmployeeID)
+Select Employees.EmployeeID, LastName, AllOrders.OrdersTotal as AllOrdersTotal, ISNULL(LateOrders.OrdersTotal,0) as LateOrdersTotal,
+PercentLateOrders = Convert(Decimal(2,2), (Cast(ISNULL(LateOrders.OrdersTotal,0) as decimal)/AllOrders.OrdersTotal)) From Employees
+Left Join LateOrders on LateOrders.EmployeeID = Employees.EmployeeID 
+Join AllOrders on AllOrders.EmployeeID = Employees.EmployeeID
+Order BY Employees.EmployeeID
+
+--Customer grouping.
+With Orders2016 as(
+Select Customers.CustomerID, Customers.CompanyName, TotalOrderAmount = SUM(OrderDetails.Quantity*OrderDetails.UnitPrice)
+From Customers Join Orders on Customers.CustomerID = Orders.CustomerID
+Join OrderDetails on OrderDetails.OrderID = Orders.OrderID
+Where  Year(OrderDate) = 2016
+Group BY Customers.CustomerID, Customers.CompanyName)
+Select CustomerID,CompanyName,TotalOrderAmount, CustomerGroup = 
+CASE WHEN TotalOrderAmount Between 0 and 1000 THEN  'Low'
+WHEN TotalOrderAMount Between 1001 and 5000 Then 'Medium'
+WHEN TotalOrderAMount Between 5001 and 1000 Then 'High'
+WHEN TotalOrderAMount >10000 Then 'Very High'
+END
+From Orders2016
+
+--Filtering last 12 months of order data, using as	the end date the last order date in orders.
+Select Top 3 ShipCountry, AVG(Freight) as AverageFreight
+FROM Orders
+Where OrderDate > DATEADD(YEAR, -1, (Select Max(OrderDate) from Orders))
+Group BY ShipCountry
+Order BY AverageFreight DESC
